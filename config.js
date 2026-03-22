@@ -8,33 +8,33 @@ const config = {
   websites: [
     {
       id: 1,
-      name: "示例网站",
-      url: "https://example.com"
+      name: "主站",
+      url: "https://www.oc99.top"
     },
     {
       id: 2,
-      name: "GitHub",
-      url: "https://github.com"
+      name: "文档",
+      url: "https://lic.oc99.top"
     },
     {
       id: 3,
-      name: "Google",
-      url: "https://google.com"
+      name: "汉克盾",
+      url: "https://safe.oc99.top"
     },
     {
       id: 4,
-      name: "Cloudflare",
-      url: "https://cloudflare.com"
+      name: "OOC站",
+      url: "https://o.oc99.top"
     },
     {
       id: 5,
-      name: "百度",
-      url: "https://baidu.com"
+      name: "圈子集合",
+      url: "https://quan.oc99.top"
     },
     {
       id: 6,
-      name: "京东",
-      url: "https://jd.com"
+      name: "病娇学院",
+      url: "https://bjxy.aoeb101la.top"
     }
   ],
   
