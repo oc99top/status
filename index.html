@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网站状态监控</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <!-- Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        warning: '#F59E0B',
+                        danger: '#EF4444',
+                        dark: '#1F2937',
+                        light: '#F3F4F6'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .card-shadow {
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            }
+            .card-hover {
+                transition: all 0.3s ease;
+            }
+            .card-hover:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            }
+            .status-online {
+                background-color: rgba(16, 185, 129, 0.1);
+                border-left: 4px solid #10B981;
+            }
+            .status-crowded {
+                background-color: rgba(245, 158, 11, 0.1);
+                border-left: 4px solid #F59E0B;
+            }
+            .status-offline {
+                background-color: rgba(239, 68, 68, 0.1);
+                border-left: 4px solid #EF4444;
+            }
+            .chart-container {
+                position: relative;
+                height: 180px;
+                width: 100%;
+            }
+            .modal-backdrop {
+                background-color: rgba(0, 0, 0, 0.5);
+                backdrop-filter: blur(4px);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- 顶部导航栏 -->
+    <nav class="bg-white shadow-md">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-line-chart text-primary text-2xl"></i>
+                <h1 class="text-xl font-bold text-gray-800">网站状态监控</h1>
+            </div>
+            <div class="text-sm text-gray-600" id="last-updated">
+                最后更新: 加载中...
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="container mx-auto px-4 py-6">
+        <!-- 总览卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6 card-shadow">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">今日累计访问量</h2>
+                <div class="flex items-end">
+                    <span class="text-3xl font-bold text-primary" id="today-total-visits">0</span>
+                    <span class="text-sm text-gray-500 ml-2 mb-1">次访问</span>
+                </div>
+                <div class="mt-4 text-sm text-gray-500 flex items-center">
+                    <i class="fa fa-refresh mr-1"></i>
+                    <span id="today-change">--</span>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6 card-shadow">
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">本月独立访客</h2>
+                <div class="flex items-end">
+                    <span class="text-3xl font-bold text-secondary" id="monthly-unique-visitors">0</span>
+                    <span class="text-sm text-gray-500 ml-2 mb-1">位访客</span>
+                </div>
+                <div class="mt-4 text-sm text-gray-500 flex items-center">
+                    <i class="fa fa-refresh mr-1"></i>
+                    <span id="monthly-change">--</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 网站状态卡片列表 -->
+        <h2 class="text-xl font-bold text-gray-800 mb-4">网站状态</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="website-cards">
+            <!-- 网站卡片将通过JavaScript动态生成 -->
+            <div class="animate-pulse bg-white rounded-lg shadow-md p-6 card-shadow">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700">加载中...</h3>
+                        <p class="text-sm text-gray-500">https://example.com</p>
+                    </div>
+                    <span class="px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">加载中</span>
+                </div>
+                <div class="mt-4 h-40 bg-gray-200 rounded"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 详情模态框 -->
+    <div id="detail-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="closeModal()"></div>
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto relative z-10">
+            <div class="p-6 border-b border-gray-200">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-xl font-bold text-gray-800" id="modal-title">网站详情</h3>
+                    <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fa fa-times text-xl"></i>
+                    </button>
+                </div>
+                <p class="text-sm text-gray-500 mt-1" id="modal-url"></p>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h4 class="text-sm font-medium text-gray-500">本月独立访客</h4>
+                        <p class="text-2xl font-bold text-secondary" id="modal-monthly-unique">0</p>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h4 class="text-sm font-medium text-gray-500">今日独立访客</h4>
+                        <p class="text-2xl font-bold text-primary" id="modal-today-unique">0</p>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h4 class="text-sm font-medium text-gray-500">今日累计访问量</h4>
+                        <p class="text-2xl font-bold text-primary" id="modal-today-total">0</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-700 mb-3">访问量趋势</h4>
+                        <div class="bg-white rounded-lg shadow p-4">
+                            <canvas id="visits-chart" height="250"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-700 mb-3">延迟统计</h4>
+                        <div class="bg-white rounded-lg shadow p-4">
+                            <canvas id="latency-chart" height="250"></canvas>
+                        </div>
+                        <div class="mt-4 grid grid-cols-2 gap-4">
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h5 class="text-sm font-medium text-gray-500">平均延迟</h5>
+                                <p class="text-xl font-bold text-gray-800" id="modal-avg-latency">0 ms</p>
+                            </div>
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h5 class="text-sm font-medium text-gray-500">最高延迟</h5>
+                                <p class="text-xl font-bold text-warning" id="modal-max-latency">0 ms</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+                <button onclick="closeModal()" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 配置文件 -->
+    <script src="config.js"></script>
+    
+    <!-- 主脚本 -->
+    <script>
+        // 全局变量
+        let visitsChart = null;
+        let latencyChart = null;
+        let websiteData = [];
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+        });
+        
+        // 初始化应用
+        async function initializeApp() {
+            try {
+                // 在实际应用中，这里会从API获取数据
+                // 现在使用模拟数据
+                await loadMockData();
+                
+                // 更新总览数据
+                updateOverviewStats();
+                
+                // 渲染网站卡片
+                renderWebsiteCards();
+                
+                // 更新最后更新时间
+                updateLastUpdated();
+                
+                // 设置定时刷新
+                setInterval(refreshData, 300000); // 每5分钟刷新一次
+            } catch (error) {
+                console.error('初始化应用失败:', error);
+                showError('加载数据失败，请稍后重试');
+            }
+        }
+        
+        // 加载模拟数据
+        async function loadMockData() {
+            // 模拟从D1数据库获取数据的延迟
+            await new Promise(resolve => setTimeout(resolve, 800));
+            
+            // 生成过去48小时的时间点
+            const now = new Date();
+            const hours = [];
+            for (let i = 47; i >= 0; i--) {
+                const hour = new Date(now);
+                hour.setHours(now.getHours() - i);
+                hours.push(hour);
+            }
+            
+            // 为每个网站生成模拟数据
+            websiteData = config.websites.map(website => {
+                // 生成48小时的访问统计数据
+                const hourlyStats = hours.map(hour => {
+                    // 随机生成访问量和延迟
+                    const totalVisits = Math.floor(Math.random() * 100) + 10;
+                    const uniqueVisitors = Math.floor(totalVisits * (0.6 + Math.random() * 0.3));
+                    
+                    // 随机生成延迟 (0-1000ms)，但让大部分在正常范围内
+                    let latency;
+                    const rand = Math.random();
+                    if (rand < 0.7) {
+                        // 70%的概率正常 (<500ms)
+                        latency = Math.floor(Math.random() * 400) + 50;
+                    } else if (rand < 0.95) {
+                        // 25%的概率拥挤 (500-800ms)
+                        latency = Math.floor(Math.random() * 300) + 500;
+                    } else {
+                        // 5%的概率离线 (模拟超时)
+                        latency = 1500;
+                    }
+                    
+                    return {
+                        timestamp: hour,
+                        totalVisits,
+                        uniqueVisitors,
+                        latency
+                    };
+                });
+                
+                // 计算今日和本月统计数据
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const thisMonth = new Date();
+                thisMonth.setDate(1);
+                thisMonth.setHours(0, 0, 0, 0);
+                
+                const todayStats = hourlyStats.filter(stat => stat.timestamp >= today);
+                const monthStats = hourlyStats.filter(stat => stat.timestamp >= thisMonth);
+                
+                const todayTotalVisits = todayStats.reduce((sum, stat) => sum + stat.totalVisits, 0);
+                const todayUniqueVisitors = todayStats.reduce((sum, stat) => sum + stat.uniqueVisitors, 0);
+                const monthlyUniqueVisitors = monthStats.reduce((sum, stat) => sum + stat.uniqueVisitors, 0);
+                
+                // 获取最新状态
+                const latestStat = hourlyStats[hourlyStats.length - 1];
+                let status = 'online';
+                let statusText = '正常';
+                
+                if (latestStat.latency >= 1000) {
+                    status = 'offline';
+                    statusText = '离线';
+                } else if (latestStat.latency >= 500) {
+                    status = 'crowded';
+                    statusText = '拥挤';
+                }
+                
+                return {
+                    ...website,
+                    hourlyStats,
+                    todayTotalVisits,
+                    todayUniqueVisitors,
+                    monthlyUniqueVisitors,
+                    status,
+                    statusText,
+                    latestLatency: latestStat.latency
+                };
+            });
+        }
+        
+        // 更新总览统计数据
+        function updateOverviewStats() {
+            // 计算所有网站的今日总访问量
+            const todayTotalVisits = websiteData.reduce((sum, website) => sum + website.todayTotalVisits, 0);
+            document.getElementById('today-total-visits').textContent = formatNumber(todayTotalVisits);
+            
+            // 计算所有网站的本月独立访客数
+            const monthlyUniqueVisitors = websiteData.reduce((sum, website) => sum + website.monthlyUniqueVisitors, 0);
+            document.getElementById('monthly-unique-visitors').textContent = formatNumber(monthlyUniqueVisitors);
+            
+            // 模拟环比变化 (实际应用中应从API获取)
+            const todayChange = (Math.random() * 40 - 10).toFixed(1);
+            const monthlyChange = (Math.random() * 30 - 5).toFixed(1);
+            
+            const todayChangeElement = document.getElementById('today-change');
+            todayChangeElement.textContent = `${todayChange > 0 ? '+' : ''}${todayChange}% 较昨日`;
+            todayChangeElement.className = `text-sm ml-2 mb-1 ${todayChange > 0 ? 'text-green-500' : 'text-red-500'}`;
+            
+            const monthlyChangeElement = document.getElementById('monthly-change');
+            monthlyChangeElement.textContent = `${monthlyChange > 0 ? '+' : ''}${monthlyChange}% 较上月`;
+            monthlyChangeElement.className = `text-sm ml-2 mb-1 ${monthlyChange > 0 ? 'text-green-500' : 'text-red-500'}`;
+        }
+        
+        // 渲染网站卡片
+        function renderWebsiteCards() {
+            const container = document.getElementById('website-cards');
+            container.innerHTML = '';
+            
+            websiteData.forEach(website => {
+                const card = document.createElement('div');
+                card.className = `bg-white rounded-lg shadow-md p-6 card-shadow card-hover cursor-pointer`;
+                card.onclick = () => openWebsiteDetail(website);
+                
+                // 根据状态设置卡片样式
+                let statusClass = '';
+                switch (website.status) {
+                    case 'online':
+                        statusClass = 'bg-green-100 text-green-800';
+                        break;
+                    case 'crowded':
+                        statusClass = 'bg-yellow-100 text-yellow-800';
+                        break;
+                    case 'offline':
+                        statusClass = 'bg-red-100 text-red-800';
+                        break;
+                }
+                
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-700">${website.name}</h3>
+                            <p class="text-sm text-gray-500 truncate" title="${website.url}">${website.url}</p>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-medium ${statusClass}">${website.statusText}</span>
+                    </div>
+                    <div class="mt-4 chart-container">
+                        <canvas id="chart-${website.id}"></canvas>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+                
+                // 渲染卡片内的图表
+                renderCardChart(website);
+            });
+        }
+        
+        // 渲染卡片内的图表
+        function renderCardChart(website) {
+            const ctx = document.getElementById(`chart-${website.id}`).getContext('2d');
+            
+            // 准备数据
+            const labels = website.hourlyStats.map(stat => {
+                const hour = stat.timestamp.getHours();
+                return `${hour}:00`;
+            });
+            
+            const visitData = website.hourlyStats.map(stat => stat.totalVisits);
+            
+            // 根据延迟设置柱状图颜色
+            const backgroundColors = website.hourlyStats.map(stat => {
+                if (stat.latency >= 1000) {
+                    return 'rgba(239, 68, 68, 0.7)'; // 红色 - 离线
+                } else if (stat.latency >= 500) {
+                    return 'rgba(245, 158, 11, 0.7)'; // 黄色 - 拥挤
+                } else {
+                    return 'rgba(16, 185, 129, 0.7)'; // 绿色 - 正常
+                }
+            });
+            
+            // 创建图表
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '访问量',
+                        data: visitData,
+                        backgroundColor: backgroundColors,
+                        borderColor: 'transparent',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        barPercentage: 0.6,
+                        categoryPercentage: 0.8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const index = context.dataIndex;
+                                    const latency = website.hourlyStats[index].latency;
+                                    return `延迟: ${latency}ms`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: false
+                        },
+                        y: {
+                            display: false,
+                            min: 0
+                        }
+                    },
+                    animation: {
+                        duration: 1000
+                    }
+                }
+            });
+        }
+        
+        // 打开网站详情
+        function openWebsiteDetail(website) {
+            // 填充模态框内容
+            document.getElementById('modal-title').textContent = website.name;
+            document.getElementById('modal-url').textContent = website.url;
+            
+            document.getElementById('modal-monthly-unique').textContent = formatNumber(website.monthlyUniqueVisitors);
+            document.getElementById('modal-today-unique').textContent = formatNumber(website.todayUniqueVisitors);
+            document.getElementById('modal-today-total').textContent = formatNumber(website.todayTotalVisits);
+            
+            // 计算平均延迟和最大延迟
+            const latencies = website.hourlyStats.map(stat => stat.latency);
+            const avgLatency = latencies.reduce((sum, val) => sum + val, 0) / latencies.length;
+            const maxLatency = Math.max(...latencies);
+            
+            document.getElementById('modal-avg-latency').textContent = `${Math.round(avgLatency)} ms`;
+            document.getElementById('modal-max-latency').textContent = `${Math.round(maxLatency)} ms`;
+            
+            // 渲染访问量趋势图
+            renderVisitsChart(website);
+            
+            // 渲染延迟统计图
+            renderLatencyChart(website);
+            
+            // 显示模态框
+            document.getElementById('detail-modal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; // 防止背景滚动
+        }
+        
+        // 渲染访问量趋势图
+        function renderVisitsChart(website) {
+            const ctx = document.getElementById('visits-chart').getContext('2d');
+            
+            // 销毁旧图表
+            if (visitsChart) {
+                visitsChart.destroy();
+            }
+            
+            // 准备数据
+            const labels = website.hourlyStats.map(stat => {
+                const hour = stat.timestamp.getHours();
+                return `${hour}:00`;
+            });
+            
+            const totalVisitsData = website.hourlyStats.map(stat => stat.totalVisits);
+            const uniqueVisitorsData = website.hourlyStats.map(stat => stat.uniqueVisitors);
+            
+            // 创建图表
+            visitsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '累计访问量',
+                            data: totalVisitsData,
+                            borderColor: '#3B82F6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#3B82F6'
+                        },
+                        {
+                            label: '独立访客',
+                            data: uniqueVisitorsData,
+                            borderColor: '#10B981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#10B981'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 6
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 渲染延迟统计图
+        function renderLatencyChart(website) {
+            const ctx = document.getElementById('latency-chart').getContext('2d');
+            
+            // 销毁旧图表
+            if (latencyChart) {
+                latencyChart.destroy();
+            }
+            
+            // 准备数据
+            const labels = website.hourlyStats.map(stat => {
+                const hour = stat.timestamp.getHours();
+                return `${hour}:00`;
+            });
+            
+            const latencyData = website.hourlyStats.map(stat => stat.latency);
+            
+            // 创建图表
+            latencyChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '延迟 (ms)',
+                            data: latencyData,
+                            borderColor: '#F59E0B',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: function(context) {
+                                const value = context.dataset.data[context.dataIndex];
+                                if (value >= 1000) {
+                                    return '#EF4444'; // 红色 - 离线
+                                } else if (value >= 500) {
+                                    return '#F59E0B'; // 黄色 - 拥挤
+                                } else {
+                                    return '#10B981'; // 绿色 - 正常
+                                }
+                            }
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 6
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + ' ms';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('detail-modal').classList.add('hidden');
+            document.body.style.overflow = ''; // 恢复背景滚动
+        }
+        
+        // 刷新数据
+        async function refreshData() {
+            try {
+                await loadMockData();
+                updateOverviewStats();
+                renderWebsiteCards();
+                updateLastUpdated();
+            } catch (error) {
+                console.error('刷新数据失败:', error);
+            }
+        }
+        
+        // 更新最后更新时间
+        function updateLastUpdated() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('zh-CN', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('last-updated').textContent = `最后更新: ${timeString}`;
+        }
+        
+        // 格式化数字 (添加千位分隔符)
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+        
+        // 显示错误消息
+        function showError(message) {
+            const container = document.getElementById('website-cards');
+            container.innerHTML = `
+                <div class="col-span-full bg-red-50 border border-red-200 rounded-lg p-6">
+                    <div class="flex items-center">
+                        <i class="fa fa-exclamation-circle text-red-500 text-xl mr-3"></i>
+                        <p class="text-red-700">${message}</p>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
