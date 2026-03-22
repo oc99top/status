@@ -190,8 +190,14 @@
         </div>
     </div>
 
-    <!-- 配置文件 -->
-    <script src="config.js"></script>
+    <!-- API配置 -->
+    <script>
+        // API配置
+        const apiConfig = {
+            // 替换为您的Cloudflare Workers URL
+            baseUrl: 'https://your-worker.your-username.workers.dev/api'
+        };
+    </script>
     
     <!-- 主脚本 -->
     <script>
@@ -199,6 +205,7 @@
         let visitsChart = null;
         let latencyChart = null;
         let websiteData = [];
+        let overviewData = null;
         
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -208,17 +215,22 @@
         // 初始化应用
         async function initializeApp() {
             try {
-                // 在实际应用中，这里会从API获取数据
-                // 现在使用模拟数据
-                await loadMockData();
+                // 显示加载状态
+                showLoadingState();
                 
-                // 更新总览数据
+                // 并行加载数据
+                const [websitesResult, overviewResult] = await Promise.all([
+                    fetchWebsiteList(),
+                    fetchOverviewData()
+                ]);
+                
+                // 更新数据
+                websiteData = websitesResult;
+                overviewData = overviewResult;
+                
+                // 更新UI
                 updateOverviewStats();
-                
-                // 渲染网站卡片
                 renderWebsiteCards();
-                
-                // 更新最后更新时间
                 updateLastUpdated();
                 
                 // 设置定时刷新
@@ -229,104 +241,96 @@
             }
         }
         
-        // 加载模拟数据
-        async function loadMockData() {
-            // 模拟从D1数据库获取数据的延迟
-            await new Promise(resolve => setTimeout(resolve, 800));
-            
-            // 生成过去48小时的时间点
-            const now = new Date();
-            const hours = [];
-            for (let i = 47; i >= 0; i--) {
-                const hour = new Date(now);
-                hour.setHours(now.getHours() - i);
-                hours.push(hour);
-            }
-            
-            // 为每个网站生成模拟数据
-            websiteData = config.websites.map(website => {
-                // 生成48小时的访问统计数据
-                const hourlyStats = hours.map(hour => {
-                    // 随机生成访问量和延迟
-                    const totalVisits = Math.floor(Math.random() * 100) + 10;
-                    const uniqueVisitors = Math.floor(totalVisits * (0.6 + Math.random() * 0.3));
-                    
-                    // 随机生成延迟 (0-1000ms)，但让大部分在正常范围内
-                    let latency;
-                    const rand = Math.random();
-                    if (rand < 0.7) {
-                        // 70%的概率正常 (<500ms)
-                        latency = Math.floor(Math.random() * 400) + 50;
-                    } else if (rand < 0.95) {
-                        // 25%的概率拥挤 (500-800ms)
-                        latency = Math.floor(Math.random() * 300) + 500;
-                    } else {
-                        // 5%的概率离线 (模拟超时)
-                        latency = 1500;
-                    }
-                    
-                    return {
-                        timestamp: hour,
-                        totalVisits,
-                        uniqueVisitors,
-                        latency
-                    };
-                });
-                
-                // 计算今日和本月统计数据
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
-                const thisMonth = new Date();
-                thisMonth.setDate(1);
-                thisMonth.setHours(0, 0, 0, 0);
-                
-                const todayStats = hourlyStats.filter(stat => stat.timestamp >= today);
-                const monthStats = hourlyStats.filter(stat => stat.timestamp >= thisMonth);
-                
-                const todayTotalVisits = todayStats.reduce((sum, stat) => sum + stat.totalVisits, 0);
-                const todayUniqueVisitors = todayStats.reduce((sum, stat) => sum + stat.uniqueVisitors, 0);
-                const monthlyUniqueVisitors = monthStats.reduce((sum, stat) => sum + stat.uniqueVisitors, 0);
-                
-                // 获取最新状态
-                const latestStat = hourlyStats[hourlyStats.length - 1];
-                let status = 'online';
-                let statusText = '正常';
-                
-                if (latestStat.latency >= 1000) {
-                    status = 'offline';
-                    statusText = '离线';
-                } else if (latestStat.latency >= 500) {
-                    status = 'crowded';
-                    statusText = '拥挤';
+        // 从API获取网站列表
+        async function fetchWebsiteList() {
+            try {
+                const response = await fetch(`${apiConfig.baseUrl}/websites`);
+                if (!response.ok) {
+                    throw new Error(`API请求失败: ${response.status}`);
                 }
                 
-                return {
-                    ...website,
-                    hourlyStats,
-                    todayTotalVisits,
-                    todayUniqueVisitors,
-                    monthlyUniqueVisitors,
-                    status,
-                    statusText,
-                    latestLatency: latestStat.latency
-                };
-            });
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || '获取网站列表失败');
+                }
+                
+                return data.data;
+            } catch (error) {
+                console.error('获取网站列表失败:', error);
+                throw error;
+            }
+        }
+        
+        // 从API获取总览数据
+        async function fetchOverviewData() {
+            try {
+                const response = await fetch(`${apiConfig.baseUrl}/overview`);
+                if (!response.ok) {
+                    throw new Error(`API请求失败: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || '获取总览数据失败');
+                }
+                
+                return data.data;
+            } catch (error) {
+                console.error('获取总览数据失败:', error);
+                throw error;
+            }
+        }
+        
+        // 从API获取网站详细统计数据
+        async function fetchWebsiteStats(websiteId) {
+            try {
+                const response = await fetch(`${apiConfig.baseUrl}/stats?website_id=${websiteId}`);
+                if (!response.ok) {
+                    throw new Error(`API请求失败: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || '获取网站统计数据失败');
+                }
+                
+                return data.data;
+            } catch (error) {
+                console.error('获取网站统计数据失败:', error);
+                throw error;
+            }
+        }
+        
+        // 显示加载状态
+        function showLoadingState() {
+            const container = document.getElementById('website-cards');
+            container.innerHTML = `
+                <div class="animate-pulse bg-white rounded-lg shadow-md p-6 card-shadow">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-700">加载中...</h3>
+                            <p class="text-sm text-gray-500">https://example.com</p>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">加载中</span>
+                    </div>
+                    <div class="mt-4 h-40 bg-gray-200 rounded"></div>
+                </div>
+            `;
         }
         
         // 更新总览统计数据
         function updateOverviewStats() {
-            // 计算所有网站的今日总访问量
-            const todayTotalVisits = websiteData.reduce((sum, website) => sum + website.todayTotalVisits, 0);
-            document.getElementById('today-total-visits').textContent = formatNumber(todayTotalVisits);
+            if (!overviewData) return;
             
-            // 计算所有网站的本月独立访客数
-            const monthlyUniqueVisitors = websiteData.reduce((sum, website) => sum + website.monthlyUniqueVisitors, 0);
-            document.getElementById('monthly-unique-visitors').textContent = formatNumber(monthlyUniqueVisitors);
+            // 更新今日总访问量
+            document.getElementById('today-total-visits').textContent = formatNumber(overviewData.today.totalVisits);
             
-            // 模拟环比变化 (实际应用中应从API获取)
-            const todayChange = (Math.random() * 40 - 10).toFixed(1);
-            const monthlyChange = (Math.random() * 30 - 5).toFixed(1);
+            // 更新本月独立访客数
+            document.getElementById('monthly-unique-visitors').textContent = formatNumber(overviewData.month.uniqueVisitors);
+            
+            // 更新环比变化
+            const todayChange = overviewData.today.change.toFixed(1);
+            const monthlyChange = overviewData.month.change.toFixed(1);
             
             const todayChangeElement = document.getElementById('today-change');
             todayChangeElement.textContent = `${todayChange > 0 ? '+' : ''}${todayChange}% 较昨日`;
@@ -454,32 +458,56 @@
         }
         
         // 打开网站详情
-        function openWebsiteDetail(website) {
-            // 填充模态框内容
-            document.getElementById('modal-title').textContent = website.name;
-            document.getElementById('modal-url').textContent = website.url;
-            
-            document.getElementById('modal-monthly-unique').textContent = formatNumber(website.monthlyUniqueVisitors);
-            document.getElementById('modal-today-unique').textContent = formatNumber(website.todayUniqueVisitors);
-            document.getElementById('modal-today-total').textContent = formatNumber(website.todayTotalVisits);
-            
-            // 计算平均延迟和最大延迟
-            const latencies = website.hourlyStats.map(stat => stat.latency);
-            const avgLatency = latencies.reduce((sum, val) => sum + val, 0) / latencies.length;
-            const maxLatency = Math.max(...latencies);
-            
-            document.getElementById('modal-avg-latency').textContent = `${Math.round(avgLatency)} ms`;
-            document.getElementById('modal-max-latency').textContent = `${Math.round(maxLatency)} ms`;
-            
-            // 渲染访问量趋势图
-            renderVisitsChart(website);
-            
-            // 渲染延迟统计图
-            renderLatencyChart(website);
-            
-            // 显示模态框
-            document.getElementById('detail-modal').classList.remove('hidden');
-            document.body.style.overflow = 'hidden'; // 防止背景滚动
+        async function openWebsiteDetail(website) {
+            try {
+                // 显示加载状态
+                document.getElementById('modal-title').textContent = '加载中...';
+                document.getElementById('modal-url').textContent = '';
+                document.getElementById('modal-monthly-unique').textContent = '加载中...';
+                document.getElementById('modal-today-unique').textContent = '加载中...';
+                document.getElementById('modal-today-total').textContent = '加载中...';
+                document.getElementById('modal-avg-latency').textContent = '加载中...';
+                document.getElementById('modal-max-latency').textContent = '加载中...';
+                
+                // 显示模态框
+                document.getElementById('detail-modal').classList.remove('hidden');
+                document.body.style.overflow = 'hidden'; // 防止背景滚动
+                
+                // 从API获取详细数据
+                const statsData = await fetchWebsiteStats(website.id);
+                
+                // 填充模态框内容
+                document.getElementById('modal-title').textContent = statsData.website.name;
+                document.getElementById('modal-url').textContent = statsData.website.url;
+                
+                document.getElementById('modal-monthly-unique').textContent = formatNumber(statsData.month.uniqueVisitors);
+                document.getElementById('modal-today-unique').textContent = formatNumber(statsData.today.uniqueVisitors);
+                document.getElementById('modal-today-total').textContent = formatNumber(statsData.today.totalVisits);
+                
+                document.getElementById('modal-avg-latency').textContent = `${Math.round(statsData.latency.average)} ms`;
+                document.getElementById('modal-max-latency').textContent = `${Math.round(statsData.latency.maximum)} ms`;
+                
+                // 准备图表数据
+                const chartData = {
+                    website: statsData.website,
+                    hourlyStats: statsData.hourlyStats.map(stat => ({
+                        timestamp: new Date(stat.timestamp),
+                        totalVisits: stat.total_visits,
+                        uniqueVisitors: stat.unique_visitors,
+                        latency: stat.latency
+                    }))
+                };
+                
+                // 渲染访问量趋势图
+                renderVisitsChart(chartData);
+                
+                // 渲染延迟统计图
+                renderLatencyChart(chartData);
+            } catch (error) {
+                console.error('加载网站详情失败:', error);
+                alert('加载网站详情失败，请稍后重试');
+                closeModal();
+            }
         }
         
         // 渲染访问量趋势图
@@ -647,7 +675,17 @@
         // 刷新数据
         async function refreshData() {
             try {
-                await loadMockData();
+                // 并行加载数据
+                const [websitesResult, overviewResult] = await Promise.all([
+                    fetchWebsiteList(),
+                    fetchOverviewData()
+                ]);
+                
+                // 更新数据
+                websiteData = websitesResult;
+                overviewData = overviewResult;
+                
+                // 更新UI
                 updateOverviewStats();
                 renderWebsiteCards();
                 updateLastUpdated();

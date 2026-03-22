@@ -59,61 +59,64 @@ INSERT INTO websites (name, url) VALUES
 ### 3. 部署Cloudflare Workers
 
 1. 克隆本仓库
-2. 修改`config.js`文件，配置您要监控的网站
-3. 使用Wrangler CLI部署Workers：
+2. 安装依赖：
 
 ```bash
-# 安装Wrangler CLI (如果尚未安装)
-npm install -g wrangler
+npm install
+```
 
-# 登录Cloudflare
+3. 登录Cloudflare：
+
+```bash
 wrangler login
-
-# 配置Wrangler
-wrangler init website-monitor
 ```
 
-4. 编辑`wrangler.toml`文件：
-
-```toml
-name = "website-monitor"
-main = "scan.js"
-compatibility_date = "2023-07-17"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "website-monitor-db"
-database_id = "<您的D1数据库ID>"
-
-[triggers]
-crons = ["0 * * * *"]  # 每小时执行一次
-```
-
-5. 部署Workers：
+4. 创建D1数据库：
 
 ```bash
-wrangler deploy
+wrangler d1 create website-monitor-db
+```
+
+5. 更新`wrangler.toml`文件中的`database_id`为您创建的数据库ID
+
+6. 初始化数据库表结构：
+
+```bash
+npm run db:init
+```
+
+7. 本地开发测试（可选）：
+
+```bash
+npm run dev
+```
+
+8. 部署到Cloudflare：
+
+```bash
+npm run deploy
 ```
 
 ### 4. 配置前端页面
 
-1. 将`index.html`和`config.js`部署到您的静态网站托管服务（如Cloudflare Pages）
-2. 在`config.js`中配置API端点：
+1. 打开`index.html`文件，找到API配置部分：
 
 ```javascript
-const config = {
-  // ...其他配置
-  api: {
+const apiConfig = {
+    // 替换为您的Cloudflare Workers URL
     baseUrl: 'https://your-worker.your-username.workers.dev/api'
-  }
 };
 ```
+
+2. 将`baseUrl`替换为您部署的Cloudflare Workers URL
+
+3. 将更新后的`index.html`部署到您的静态网站托管服务（如Cloudflare Pages、GitHub Pages等）
 
 ## 使用说明
 
 ### 配置监控网站
 
-编辑`config.js`文件，在`websites`数组中添加或修改要监控的网站：
+网站配置现在存储在`worker.js`文件中的`config`对象中：
 
 ```javascript
 const config = {
@@ -127,6 +130,22 @@ const config = {
   ],
   // ...其他配置
 };
+```
+
+修改后需要重新部署Worker：
+
+```bash
+npm run deploy
+```
+
+如果您想在不修改代码的情况下管理网站，可以使用SQL语句直接操作D1数据库：
+
+```bash
+# 添加新网站
+wrangler d1 execute website-monitor-db --command="INSERT INTO websites (name, url) VALUES ('新网站', 'https://new-website.com')"
+
+# 查看所有网站
+npm run db:preview
 ```
 
 ### 自定义监控参数
@@ -175,6 +194,28 @@ const config = {
 - **本月独立访客**：从本月1号到现在的独立访客数量
 - **平均延迟**：过去48小时的平均延迟时间
 - **最高延迟**：过去48小时的最高延迟时间
+
+## 构建和部署命令
+
+### 构建命令
+```bash
+npm run build
+```
+
+### 部署命令
+```bash
+npm run deploy
+```
+
+### 数据库初始化
+```bash
+npm run db:init
+```
+
+### 查看数据库内容
+```bash
+npm run db:preview
+```
 
 ## 故障排除
 

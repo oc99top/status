@@ -1,0 +1,15 @@
+name = "website-monitor"
+main = "worker.js"
+compatibility_date = "2023-07-17"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "website-monitor-db"
+database_id = "<your-database-id>"
+
+[triggers]
+crons = ["0 * * * *"]  # 每小时执行一次网站扫描
+
+[vars]
+# 可以在这里设置环境变量
+# API_KEY = "your-api-key"

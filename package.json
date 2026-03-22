@@ -1,0 +1,25 @@
+{
+  "name": "website-monitor",
+  "version": "1.0.0",
+  "description": "网站状态监控平台 - 基于Cloudflare Workers和D1数据库",
+  "main": "worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "echo \"构建完成，准备部署\"",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute website-monitor-db --file=./schema.sql",
+    "db:preview": "wrangler d1 execute website-monitor-db --command=\"SELECT * FROM websites\""
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "d1",
+    "monitoring",
+    "analytics"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
